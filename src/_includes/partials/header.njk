@@ -1,12 +1,13 @@
 {% from "partials/icon.njk" import icon %}
 
-<header class="site-head"{% if site.cover_image %} style="background-image: url('{{ site.cover_image }}')"{% endif %}>
+<header class="site-head"{% if site.cover_image %} {% backgroundimage site.cover_image, [7183] %}{% endif %}>
     <div class="container">
         <div class="site-mast">
             {% if site.logo %}
                 <div class="site-mast-left">
                     <a {% if page.url == "/" %}aria-current="page"{% endif %} href="{{ site.url }}">
                         <img class="site-logo" src="{{ site.logo }}" alt="{{ site.title }}">
+                        {# {% image site.logo, "site.logo", site.title, 30, [30] %} #}
                     </a>
                 </div>
             {% endif %}
