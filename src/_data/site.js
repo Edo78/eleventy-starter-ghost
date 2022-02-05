@@ -18,17 +18,14 @@ const cacheWrapper = async (key, duration, ...arguments) => {
   if (cacheAPI[key]) {
     let asset = new AssetCache(cacheKey);
     if (asset.isCacheValid(duration)) {
-      console.log(`Cache hit for ${cacheKey}`);
       return asset.getCachedValue();
     }
 
     try {
       let value = await cacheAPI[key](...arguments);
-      console.log(`Cache miss for ${cacheKey}`);
       asset.save(value, 'json');
       return value;
     } catch (error) {
-      console.error(`Cache error for ${cacheKey} - ${error}`);
       return asset.getCachedValue();
     }
   }

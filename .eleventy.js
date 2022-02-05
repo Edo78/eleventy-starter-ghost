@@ -3,11 +3,11 @@ require("dotenv").config();
 const cleanCSS = require("clean-css");
 const fs = require("fs");
 const pluginRSS = require("@11ty/eleventy-plugin-rss");
-const localImages = require("eleventy-plugin-local-images");
-const lazyImages = require("eleventy-plugin-lazyimages");
 const ghostContentAPI = require("@tryghost/content-api");
 const {AssetCache} = require("@11ty/eleventy-cache-assets");
-
+const Image = require("@11ty/eleventy-img");
+const slugify = require("@sindresorhus/slugify");
+const safeLinks = require('@sardine/eleventy-plugin-external-links');
 const htmlMinTransform = require("./src/transforms/html-min-transform.js");
 
 // Init Ghost API
@@ -29,17 +29,14 @@ const cacheWrapper = async (key, duration, ...arguments) => {
   if (cacheAPI[key]) {
     let asset = new AssetCache(cacheKey);
     if (asset.isCacheValid(duration)) {
-      console.log(`Cache hit for ${cacheKey}`);
       return asset.getCachedValue();
     }
 
     try {
       let value = await cacheAPI[key](...arguments);
-      console.log(`Cache miss for ${cacheKey}`);
       asset.save(value, 'json');
       return value;
     } catch (error) {
-      console.error(`Cache error for ${cacheKey} - ${error}`);
       return asset.getCachedValue();
     }
   }
@@ -50,6 +47,43 @@ const stripDomain = url => {
   return url.replace(process.env.GHOST_API_URL, "");
 };
 
+const imageShortcode = (src, cls, alt, sizes, widths) => {
+  src = src.startsWith('//www.gravatar.com/') ? `https:${src}` : src;
+  // escape double quotes from alt text
+  alt = alt.replace(/"/g, '&quot;');
+  const options = {
+    customName: slugify(alt),
+    widths,
+    formats: ["webp", "jpeg"],
+    outputDir: "./dist/img",
+    cacheOptions: {
+      // if a remote image URL, this is the amount of time before it fetches a fresh copy
+      duration: "30d",
+      // project-relative path to the cache directory
+      directory: ".cache",
+      removeUrlQueryParams: false,
+    },
+    filenameFormat: function (id, src, width, format, options) {
+      return `${options.customName}-${width}.${format}`;
+    }
+  };
+
+  // generate images, while this is async we don’t wait
+  Image(src, options);
+
+  let imageAttributes = {
+    class: cls,
+    alt,
+    sizes,
+    loading: "lazy",
+    decoding: "async",
+  };
+  // get metadata even the images are not fully generated
+  let metadata = Image.statsByDimensionsSync(src, Math.max(...widths), null, options);
+  // You bet we throw an error on missing alt in `imageAttributes` (alt="" works okay)
+  return Image.generateHTML(metadata, imageAttributes);
+}
+
 module.exports = function(config) {
   // Minify HTML
   config.addTransform("htmlmin", htmlMinTransform);
@@ -57,19 +91,13 @@ module.exports = function(config) {
   // Assist RSS feed template
   config.addPlugin(pluginRSS);
 
-  // Apply performance attributes to images
-  config.addPlugin(lazyImages, {
-    cacheFile: ""
-  });
+  // Add safe links
+  config.addPlugin(safeLinks);
 
-  // Copy images over from Ghost
-  config.addPlugin(localImages, {
-    distPath: "dist",
-    assetPath: "/assets/images",
-    selector: "img",
-    attribute: "data-src", // Lazy images attribute
-    verbose: false
-  });
+  // Add 'image' shortcode
+  config.addNunjucksShortcode("image", imageShortcode);
+  config.addLiquidShortcode("image", imageShortcode);
+  config.addJavaScriptFunction("image", imageShortcode);
 
   // Inline CSS
   config.addFilter("cssmin", code => {
@@ -113,7 +141,7 @@ module.exports = function(config) {
   // Get all pages, called 'docs' to prevent
   // conflicting the eleventy page object
   config.addCollection("docs", async function(collection) {
-    collection = await cacheWrapper("ghost_pages", "30d", {
+    collection = await cacheWrapper("ghost_pages", "10d", {
       include: "authors",
       limit: "all",
     });
@@ -154,7 +182,7 @@ module.exports = function(config) {
 
   // Get all authors
   config.addCollection("authors", async function(collection) {
-    collection = await cacheWrapper("ghost_authors", "30d", {
+    collection = await cacheWrapper("ghost_authors", "10d", {
       limit: "all"
     });
       

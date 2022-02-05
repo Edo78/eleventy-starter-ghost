@@ -32,7 +32,9 @@
   "dependencies": {
     "@11ty/eleventy": "^1.0.0",
     "@11ty/eleventy-cache-assets": "^2.3.0",
+    "@11ty/eleventy-img": "^1.0.0",
     "@11ty/eleventy-plugin-rss": "^1.1.1",
+    "@sardine/eleventy-plugin-external-links": "^1.4.0",
     "@tryghost/content-api": "1.6.0",
     "@tryghost/helpers": "^1.1.6",
     "clean-css": "^4.2.1",

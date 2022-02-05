@@ -8,7 +8,7 @@
     <article class="content">
         {% if post.feature_image %}
             <figure class="post-feature-image">
-                <img src="{{ post.feature_image }}" alt="{{ title }}">
+                {% image post.feature_image, "", title, 500, [960] %}
             </figure>
         {% endif %}
         <section class="post-full-content">
