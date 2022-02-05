@@ -6,6 +6,7 @@ const pluginRSS = require("@11ty/eleventy-plugin-rss");
 const localImages = require("eleventy-plugin-local-images");
 const lazyImages = require("eleventy-plugin-lazyimages");
 const ghostContentAPI = require("@tryghost/content-api");
+const {AssetCache} = require("@11ty/eleventy-cache-assets");
 
 const htmlMinTransform = require("./src/transforms/html-min-transform.js");
 
@@ -15,6 +16,34 @@ const api = new ghostContentAPI({
   key: process.env.GHOST_CONTENT_API_KEY,
   version: "v4"
 });
+
+const cacheAPI = {
+  'ghost_authors': api.authors.browse,
+  'ghost_tags': api.tags.browse,
+  'ghost_posts': api.posts.browse,
+  'ghost_pages': api.pages.browse,
+}
+
+const cacheWrapper = async (key, duration, ...arguments) => {
+  const cacheKey = `${key}_${JSON.stringify(arguments)}`;
+  if (cacheAPI[key]) {
+    let asset = new AssetCache(cacheKey);
+    if (asset.isCacheValid(duration)) {
+      console.log(`Cache hit for ${cacheKey}`);
+      return asset.getCachedValue();
+    }
+
+    try {
+      let value = await cacheAPI[key](...arguments);
+      console.log(`Cache miss for ${cacheKey}`);
+      asset.save(value, 'json');
+      return value;
+    } catch (error) {
+      console.error(`Cache error for ${cacheKey} - ${error}`);
+      return asset.getCachedValue();
+    }
+  }
+}
 
 // Strip Ghost domain from urls
 const stripDomain = url => {
@@ -63,16 +92,12 @@ module.exports = function(config) {
 
   // Get all pages tagged with 'footer'
   config.addCollection("footers", async function(collection) {
-    collection = await api.pages
-      .browse({
-        include: "authors",
-        limit: "all",
-        filter: "tag:hash-footer",
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    collection = await cacheWrapper("ghost_pages", "30d", {
+      include: "authors",
+      limit: "all",
+      filter: "tag:hash-footer",
+    });
+    
     collection.map(footer => {
       footer.url = stripDomain(footer.url);
       footer.primary_author.url = stripDomain(footer.primary_author.url);
@@ -88,15 +113,11 @@ module.exports = function(config) {
   // Get all pages, called 'docs' to prevent
   // conflicting the eleventy page object
   config.addCollection("docs", async function(collection) {
-    collection = await api.pages
-      .browse({
-        include: "authors",
-        limit: "all",
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    collection = await cacheWrapper("ghost_pages", "30d", {
+      include: "authors",
+      limit: "all",
+    });
+  
     collection.map(doc => {
       doc.url = stripDomain(doc.url);
       doc.primary_author.url = stripDomain(doc.primary_author.url);
@@ -111,14 +132,10 @@ module.exports = function(config) {
 
   // Get all posts
   config.addCollection("posts", async function(collection) {
-    collection = await api.posts
-      .browse({
-        include: "tags,authors",
-        limit: "all"
-      })
-      .catch(err => {
-        console.error(err);
-      });
+    collection = await cacheWrapper("ghost_posts", "1d", {
+      include: "tags,authors",
+      limit: "all"
+    });
 
     collection.forEach(post => {
       post.url = stripDomain(post.url);
@@ -137,24 +154,16 @@ module.exports = function(config) {
 
   // Get all authors
   config.addCollection("authors", async function(collection) {
-    collection = await api.authors
-      .browse({
-        limit: "all"
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    collection = await cacheWrapper("ghost_authors", "30d", {
+      limit: "all"
+    });
+      
     // Get all posts with their authors attached
-    const posts = await api.posts
-      .browse({
-        include: "authors",
-        limit: "all"
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    const posts = await cacheWrapper("ghost_posts", "1d", {
+      include: "authors",
+      limit: "all"
+    });
+      
     // Attach posts to their respective authors
     collection.forEach(async author => {
       const authorsPosts = posts.filter(post => {
@@ -171,25 +180,17 @@ module.exports = function(config) {
 
   // Get all tags
   config.addCollection("tags", async function(collection) {
-    collection = await api.tags
-      .browse({
-        include: "count.posts",
-        limit: "all"
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    collection = await cacheWrapper("ghost_tags", "1d", {
+      include: "count.posts",
+      limit: "all"
+    });
+      
     // Get all posts with their tags attached
-    const posts = await api.posts
-      .browse({
-        include: "tags,authors",
-        limit: "all"
-      })
-      .catch(err => {
-        console.error(err);
-      });
-
+    const posts = await cacheWrapper("ghost_posts", "1d", {
+      include: "tags,authors",
+      limit: "all"
+    });
+    
     // Attach posts to their respective tags
     collection.forEach(async tag => {
       const taggedPosts = posts.filter(post => {
