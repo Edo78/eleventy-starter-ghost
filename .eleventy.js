@@ -84,6 +84,29 @@ const imageShortcode = (src, cls, alt, sizes, widths) => {
   return Image.generateHTML(metadata, imageAttributes);
 }
 
+const backgroundImageShortcode = (src, widths) => {
+  const options = {
+    widths,
+    formats: ["webp"],
+    outputDir: "./dist/img",
+    cacheOptions: {
+      // if a remote image URL, this is the amount of time before it fetches a fresh copy
+      duration: "30d",
+      // project-relative path to the cache directory
+      directory: ".cache",
+      removeUrlQueryParams: false,
+    },
+  };
+
+  // generate images, while this is async we don’t wait
+  Image(src, options);
+
+  // get metadata even the images are not fully generated
+  let metadata = Image.statsByDimensionsSync(src, Math.max(...widths), null, options);
+  const result = `style="background-image: url('${process.env.SITE_URL}${metadata['webp'][0].url}')"`;
+  return result;
+}
+
 module.exports = function(config) {
   // Minify HTML
   config.addTransform("htmlmin", htmlMinTransform);
@@ -98,6 +121,11 @@ module.exports = function(config) {
   config.addNunjucksShortcode("image", imageShortcode);
   config.addLiquidShortcode("image", imageShortcode);
   config.addJavaScriptFunction("image", imageShortcode);
+
+  // Add 'background-image' shortcode
+  config.addNunjucksShortcode("backgroundimage", backgroundImageShortcode);
+  config.addLiquidShortcode("backgroundimage", backgroundImageShortcode);
+  config.addJavaScriptFunction("backgroundimage", backgroundImageShortcode);
 
   // Inline CSS
   config.addFilter("cssmin", code => {
